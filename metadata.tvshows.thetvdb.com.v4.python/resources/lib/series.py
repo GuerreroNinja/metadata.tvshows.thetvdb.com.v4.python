@@ -1,4 +1,5 @@
 from pprint import pformat
+import re
 
 import xbmcgui
 import xbmcplugin
@@ -22,6 +23,40 @@ def search_series(title, settings, handle, year=None) -> None:
     logger.debug(f'Searching for TV show "{title}", year="{year}"')
 
     tvdb_client = tvdb.Client(settings)
+    # If the title ends with a numeric value in parentheses, treat it as a
+    # TVDB ID unless it looks like a release year.
+    id_match = re.search(r'\((\d+)\)\s*$', title)
+    if id_match:
+        candidate_id = int(id_match.group(1))
+
+        # Normal release years are not TVDB IDs.
+        if not 1900 <= candidate_id <= 2100:
+            try:
+                show = tvdb_client.get_series(candidate_id)
+                logger.debug(
+                    f'Using TVDB ID {candidate_id} directly for "{title}"'
+                )
+
+                show_name = show.get('name') or title
+                first_aired = show.get('firstAired') or ''
+                if first_aired:
+                    show_year = first_aired.split('-')[0]
+                    show_name = f'{show_name} ({show_year})'
+
+                liz = xbmcgui.ListItem(show_name, offscreen=True)
+                xbmcplugin.addDirectoryItems(
+                    handle,
+                    [(str(candidate_id), liz, True)],
+                    1
+                )
+                return
+
+            except Exception as exc:
+                logger.debug(
+                    f'TVDB ID {candidate_id} could not be resolved: {exc}. '
+                    'Falling back to title search.'
+                )
+
     if year is None:
         search_results = tvdb_client.search(title, type="series", limit=10)
     else:
