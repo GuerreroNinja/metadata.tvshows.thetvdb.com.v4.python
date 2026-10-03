@@ -19,10 +19,11 @@ ARTWORK_URL_PREFIX = 'https://artworks.thetvdb.com'
 
 
 def search_series(title, settings, handle, year=None) -> None:
-    # add the found shows to the list
     logger.debug(f'Searching for TV show "{title}", year="{year}"')
 
     tvdb_client = tvdb.Client(settings)
+    search_results = None
+
     # If the title ends with a numeric value in parentheses, treat it as a
     # TVDB ID unless it looks like a release year.
     id_match = re.search(r'\((\d+)\)\s*$', title)
@@ -32,38 +33,73 @@ def search_series(title, settings, handle, year=None) -> None:
         # Normal release years are not TVDB IDs.
         if not 1900 <= candidate_id <= 2100:
             try:
+                # First resolve the ID to get the exact series name and year.
                 show = tvdb_client.get_series(candidate_id)
-                logger.debug(
-                    f'Using TVDB ID {candidate_id} directly for "{title}"'
-                )
 
-                show_name = show.get('name') or title
-                first_aired = show.get('firstAired') or ''
-                if first_aired:
-                    show_year = first_aired.split('-')[0]
-                    show_name = f'{show_name} ({show_year})'
+                if show:
+                    show_name = show.get("name")
+                    show_year = show.get("year")
 
-                liz = xbmcgui.ListItem(show_name, offscreen=True)
-                xbmcplugin.addDirectoryItems(
-                    handle,
-                    [(str(candidate_id), liz, True)],
-                    1
-                )
-                return
+                    logger.debug(
+                        f'Found TVDB ID {candidate_id}: '
+                        f'"{show_name}" ({show_year})'
+                    )
+
+                    # Search using the exact series name and year so that
+                    # Kodi receives a normal TheTVDB search result.
+                    if show_name:
+                        search_results = tvdb_client.search(
+                            show_name,
+                            year=show_year,
+                            type="series",
+                            limit=10,
+                        )
+
+                        # Keep only the exact TVDB ID we requested.
+                        search_results = [
+                            result
+                            for result in search_results
+                            if str(result.get("tvdb_id")) == str(candidate_id)
+                        ]
+
+                        if search_results:
+                            logger.debug(
+                                f'Using TVDB search result for ID '
+                                f'{candidate_id}'
+                            )
+                        else:
+                            logger.debug(
+                                f'No matching search result found for '
+                                f'TVDB ID {candidate_id}. '
+                                'Falling back to title search.'
+                            )
+                            search_results = None
 
             except Exception as exc:
                 logger.debug(
-                    f'TVDB ID {candidate_id} could not be resolved: {exc}. '
+                    f'TVDB ID {candidate_id} lookup failed: {exc}. '
                     'Falling back to title search.'
                 )
 
-    if year is None:
-        search_results = tvdb_client.search(title, type="series", limit=10)
-    else:
-        search_results = tvdb_client.search(title, year=year, type="series", limit=10)
-        if not search_results:
-            logger.debug(f"No results found for '{title}' where year='{year}'. Falling back to search without year criteria.")
-            search_results = tvdb_client.search(title, type="series", limit=10)
+    # Fall back to the normal title search if no TVDB ID was resolved.
+    if search_results is None:
+        if year is None:
+            search_results = tvdb_client.search(
+                title, type="series", limit=10
+            )
+        else:
+            search_results = tvdb_client.search(
+                title, year=year, type="series", limit=10
+            )
+
+            if not search_results:
+                logger.debug(
+                    f"No results found for '{title}' where year='{year}'. "
+                    "Falling back to search without year criteria."
+                )
+                search_results = tvdb_client.search(
+                    title, type="series", limit=10
+                )
 
     logger.debug(f'Search results {search_results}')
 
@@ -72,29 +108,20 @@ def search_series(title, settings, handle, year=None) -> None:
 
     language = get_language(settings)
     items = []
+
     for show in search_results:
-        show_name = None
-        translations = show.get('translations') or {}
-        if translations:
-            show_name = translations.get(language)
-            if not show_name:
-                show_name = translations.get('eng')
-        if not show_name:
-            show_name = show['name']
-        year = show.get('year')
-        if year:
-            show_name += f' ({year})'
+        show_name = show["translations"].get(language, show["name"])
+        show_year = show.get("year")
+
+        if show_year:
+            show_name += f" ({show_year})"
 
         liz = xbmcgui.ListItem(show_name, offscreen=True)
-        url = str(show['tvdb_id'])
-        is_folder = True
-        items.append((url, liz, is_folder))
+        logger.debug(f'FIND RESULT: title="{show_name}" tvdb_id="{show["tvdb_id"]}" year="{show.get("year")}"')
+        url = str(show["tvdb_id"])
+        items.append((url, liz, True))
 
-    xbmcplugin.addDirectoryItems(
-        handle,
-        items,
-        len(items)
-    )
+    xbmcplugin.addDirectoryItems(handle, items, len(items))
 
 
 def get_series_details(id, settings, handle):
