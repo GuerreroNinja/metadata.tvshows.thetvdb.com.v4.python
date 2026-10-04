@@ -43,8 +43,9 @@ def run():
             search_series(title, settings, handle, year)
         elif action == 'getdetails' and 'url' in params:
             logger.debug("about to call get series details")
-            get_series_details(
-                urllib.parse.unquote_plus(params["url"]), settings, handle)
+            url = urllib.parse.unquote_plus(params["url"])
+            tvdb_id, title = url.split("|", 1)
+            get_series_details(tvdb_id, settings, handle, title)
         elif action == 'getepisodelist' and 'url' in params:
             logger.debug("about to call get series episodes")
             get_series_episodes(

@@ -118,13 +118,13 @@ def search_series(title, settings, handle, year=None) -> None:
 
         liz = xbmcgui.ListItem(show_name, offscreen=True)
         logger.debug(f'FIND RESULT: title="{show_name}" tvdb_id="{show["tvdb_id"]}" year="{show.get("year")}"')
-        url = str(show["tvdb_id"])
+        url = f'{show["tvdb_id"]}|{title}'
         items.append((url, liz, True))
 
     xbmcplugin.addDirectoryItems(handle, items, len(items))
 
 
-def get_series_details(id, settings, handle):
+def get_series_details(id, settings, handle, title):
     # get the details of the found series
     logger.debug(f'Find info of tvshow with id {id}')
     tvdb_client = tvdb.Client(settings)
@@ -141,8 +141,8 @@ def get_series_details(id, settings, handle):
         if remoteId.get('sourceName') == "TheMovieDB.com":
             showId['tmdb'] = remoteId.get('id')
     
-    details = {'title': show["name"],
-                'tvshowtitle': show["name"],
+    details = {'title': title,
+                'tvshowtitle': title,
                 'plot': show["overview"],
                 'plotoutline': show["overview"],
                 'episodeguide': json.dumps(showId),
