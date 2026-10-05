@@ -39,6 +39,9 @@ def search_series(title, settings, handle, year=None) -> None:
                 if show:
                     show_name = show.get("name")
                     show_year = show.get("year")
+                    
+                    # Remove the TVDB ID suffix from the folder title.
+                    title = re.sub(r'\s*\(\d+\)\s*$', '', title)
 
                     logger.debug(
                         f'Found TVDB ID {candidate_id}: '
